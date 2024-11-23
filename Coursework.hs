@@ -1,3 +1,11 @@
+{-
+Allowed Imports
+Data.Char , Data.List , Data.Maybe , Data.Set , Data.Map , 
+System.Random , Text.Read , Control.Monad
+-}
+
+-- use foldl' if you can
+import Data.List (foldl')
 
 ------------------------- Merge sort
 
@@ -20,7 +28,6 @@ msort xs  = msort (take n xs) `merge` msort (drop n xs)
 
 type Character = String
 type Party     = [Character]
-
 type Node      = Int
 type Location  = String
 type Map       = [(Node,Node)]
@@ -39,10 +46,32 @@ testGame i = Game [(0,1)] i ["Russell"] [[],["Brouwer","Heyting"]]
 ------------------------- Assignment 1: The game world
 
 connected :: Map -> Node -> [Node]
-connected = undefined
+connected m n = xs ++ ys
+  where 
+    xs = [fst x | x <- m, snd x == n] :: [Node]
+    ys = [snd x | x <- m, fst x == n] :: [Node]
+
+
+-- connect a b m = foldl' f [] m
+--   where
+--     (n1,n2) = (min a b, max a b)
+--     f acc (x1,x2)
+      -- | etc
+--       | n1 < x1 || n1 == x1 && n2 < x2 = (x1,x2) : acc
+--       | otherwise = (n1,n2) : (x1,x2) : acc
+
 
 connect :: Node -> Node -> Map -> Map
-connect = undefined
+connect a b m = connect' (min a b) (max a b) m
+  where
+    
+    connect' n1 n2 [] = [(n1,n2)]
+    connect' n1 n2 ((x1,x2):xs)
+      | n1 > x1 || (n1 == x1 && n2 > x2) 
+                           = (x1,x2) : connect' n1 n2 xs
+      | (x1,x2) == (n1,n2) = (x1,x2) : xs
+      | otherwise          = (n1,n2) : (x1,x2) : xs
+
 
 disconnect :: Node -> Node -> Map -> Map
 disconnect = undefined
