@@ -56,7 +56,7 @@ connected m n = xs ++ ys
 --   where
 --     (n1,n2) = (min a b, max a b)
 --     f acc (x1,x2)
-      -- | etc
+      -- | etc.......
 --       | n1 < x1 || n1 == x1 && n2 < x2 = (x1,x2) : acc
 --       | otherwise = (n1,n2) : (x1,x2) : acc
 
@@ -72,27 +72,55 @@ connect a b m = connect' (min a b) (max a b) m
       | (x1,x2) == (n1,n2) = (x1,x2) : xs
       | otherwise          = (n1,n2) : (x1,x2) : xs
 
-
+-- maybe not preferred cos ik theres only one instance at most
 disconnect :: Node -> Node -> Map -> Map
-disconnect = undefined
+disconnect a b m = filter (/=n) m 
+  where
+    n = (min a b, max a b)
+
+-- NEW GLOBAL FNCTION, insertChars removeChars CHECK IF IM ALLOWED TO DO THIS
+insertChars :: [Character] -> Party -> Party
+insertChars cs p = msort $ p ++ [x | x <- cs, not $ elem x p] 
+
+removeChars :: [Character] -> Party -> Party
+removeChars cs p = [x | x <- p, not $ elem x cs]
 
 add :: Party -> Event
-add = undefined
+add _ Over = Over
+add cs (Game m n p ps) = Game m n p' ps
+  where
+    p' = insertChars cs p
+
 
 addAt :: Node -> Party -> Event
-addAt = undefined
+addAt _ _ Over = Over
+addAt n_i cs (Game m n p ps) = Game m n p ps'
+  where
+    ps' = take n_i ps 
+          ++ [insertChars cs (ps !! n_i)] 
+          ++ drop (n_i+1) ps
 
 addHere :: Party -> Event
-addHere = undefined
+addHere _ Over = Over
+addHere cs (Game m n p ps) = addAt n cs (Game m n p ps)
 
 remove :: Party -> Event
-remove = undefined
+remove _ Over = Over
+remove cs (Game m n p ps) = Game m n p' ps
+  where
+    p' = removeChars cs p
 
 removeAt :: Node -> Party -> Event
-removeAt = undefined
+removeAt _ _ Over = Over
+removeAt n_i cs (Game m n p ps) = Game m n p ps'
+  where
+    ps' = take n_i ps 
+          ++ [removeChars cs (ps !! n_i)]
+          ++ drop (n_i+1) ps
 
 removeHere :: Party -> Event
-removeHere = undefined
+removeHere _ Over = Over
+removeHere cs (Game m n p ps) = removeAt n cs (Game m n p ps)
 
 
 ------------------------- Assignment 2: Dialogues
@@ -121,12 +149,37 @@ testDialogue = Branch ( isAtZero )
   isAtZero Over           = False
   isAtZero (Game _ n _ _) = n == 0
 
-
+-- CONSIDER REPLACING game WITH g
 dialogue :: Game -> Dialogue -> IO Game
-dialogue = undefined
+dialogue game (Action str e) = do
+  putStrLn str 
+  return $ e game
+dialogue game (Choice str []) = do 
+  putStrLn str
+  return game
+dialogue game (Choice str ds) = do
+  putStrLn str
+  let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
+  mapM_ putStrLn options
+  putStr $ prompt ++ " "
+  input <- getLine 
+  let i = read input :: Int
+  dialogue game (snd $ ds !! (i-1))
+
+dialogue game (Branch f e1 e2) = do
+  if f game then
+    dialogue game e1
+  else
+    dialogue game e2
+
 
 findDialogue :: Party -> Dialogue
-findDialogue = undefined
+findDialogue chars = findDialogue' chars theDialogues
+  where 
+    findDialogue' _ [] = Action line0 (const Over)
+    findDialogue' cs ((p,d):ds) 
+      | cs == p   = d
+      | otherwise = findDialogue' cs ds
 
 
 
