@@ -5,8 +5,10 @@ System.Random , Text.Read , Control.Monad
 -}
 
 -- use foldl' if you can
-import Data.List (foldl')
-
+import Data.List (foldl', null, length, map, filter, take, drop, elem, zip)
+import Data.Maybe (fromJust, fromMaybe, isJust, isNothing)
+import Text.Read (readMaybe)
+import Data.Char (isDigit)
 ------------------------- Merge sort
 
 merge :: Ord a => [a] -> [a] -> [a]
@@ -151,32 +153,32 @@ testDialogue = Branch ( isAtZero )
 
 -- CONSIDER REPLACING game WITH g
 dialogue :: Game -> Dialogue -> IO Game
-dialogue game (Action str e) = do
+dialogue g (Action str e) = do
   putStrLn str 
-  return $ e game
-dialogue game (Choice str []) = do 
+  return $ e g
+dialogue g (Choice str []) = do 
   putStrLn str
-  return game
-dialogue game (Choice str ds) = do
+  return g
+dialogue g (Choice str ds) = do
   putStrLn str
   let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
   mapM_ putStrLn options
   putStr $ prompt ++ " "
   input <- getLine 
   let i = read input :: Int
-  dialogue game (snd $ ds !! (i-1))
+  dialogue g (snd $ ds !! (i-1))
 
-dialogue game (Branch f e1 e2) = do
-  if f game then
-    dialogue game e1
+dialogue g (Branch f e1 e2) = do
+  if f g then
+    dialogue g e1
   else
-    dialogue game e2
+    dialogue g e2
 
 
 findDialogue :: Party -> Dialogue
 findDialogue chars = findDialogue' chars theDialogues
   where 
-    findDialogue' _ [] = Action line0 (const Over)
+    findDialogue' _ [] = Action line0 id
     findDialogue' cs ((p,d):ds) 
       | cs == p   = d
       | otherwise = findDialogue' cs ds
@@ -191,12 +193,139 @@ line3 = "With you are:"
 line4 = "You can see:"
 line5 = "What will you do?"
 
+-- -- lb and ub are the bounds of the location list, and uub is for all options
+-- getInput :: Int -> Int -> Int -> IO [Int]
+-- getInput lb ub uub = do
+--   input <- getLine 
+--   let input' = map (\x -> readMaybe x :: Maybe Int) (words input)
+--   checks xs 
+--     | null xs = failTests
+--     | any isNothing xs = failTests
+--     | any (< Just lb) || any (> Just uub) = failTests
+--     | length xs == 1 && all (<= Just ub) = getLocations
+--     | otherwise = getCharacters
+
+--   where
+--     failTests = do
+--       putStrLn line6  
+--       getInput lb ub uub
+
+--     getLocations ::
+
+
+--     getCharacters = 
+
+
+getInput :: [Int] -> IO [Int]
+getInput valid_xs = do
+  putStr $ prompt ++ " "
+  input <- getLine
+  let parsedInput = map (\x -> readMaybe x :: Maybe Int) (words input) 
+  checks parsedInput 
+    where
+      checks as
+        | any isNothing as = failTests
+        | null as = failTests
+        | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as  -- should be unique elems returned only
+        | otherwise = failTests
+
+      failTests :: IO [Int]
+      failTests = do
+        putStrLn line6  
+        putStr $ prompt ++ " "
+        getInput valid_xs
+
+
+
+-- stepInputs :: [Int] -> [String] -> IO [String]
+-- stepInputs [] acc = return acc
+-- stepInputs choices acc = do
+--   selected <- getInput choices
+--   handleSelected selected acc
+--   where
+--     handleSelected [] acc = return acc  
+--     handleSelected (c:cs) acc
+--       | c `elem` [1..l1] = stepInputs cs (paths !! (c - 1) : acc)  -- Valid path
+--       | c == 0 = return []  -- Exit input handling
+--       | l1 < c && c <= l3 = stepInputs cs (allOptions !! (c - 1) : acc)  -- Valid other options
+--       | otherwise = do
+--           putStrLn "Invalid input. Try again."  -- Handle invalid input
+--           stepInputs choices acc
+
+locationInput :: [Int] -> [(Int, Location)] -> Maybe Location
+locationInput [x] ln = lookup x ln 
+locationInput xs _ = Nothing
+
+characterInput :: [Int] -> [(Int, Character)] -> Party -> Maybe Party
+characterInput [] _ [] = Nothing
+characterInput [] _ acc = Just acc
+characterInput (x:xs) ln acc 
+  | isNothing val = Nothing
+  | otherwise = characterInput xs ln (fromJust val : acc)
+    where 
+      val = (lookup x ln)
 
 step :: Game -> IO Game
-step = undefined
+step Over = return Over
+step (Game m n p ps) = do
+    putStrLn $ line1 ++ theDescriptions !! n ++ "\n"
+    printOptions line2 $ map showLocation paths
+    printOptions line3 $ map show curParty
+    printOptions line4 $ map show charsHere
+    putStrLn line5 
+
+    xs <- getInput [0..l3]
+    print paths
+    -- let testtt = locationInput xs paths 
+
+    handleInputs xs
+      where
+        paths = [(i,x) | (i, x) <- zip [1..] (connected m n)] 
+        l1 = length paths
+
+        curParty = [(i+l1,x)| (i, x) <- zip [1..] p]
+        l2 = l1 + length curParty
+
+        charsHere = [(i+l2,x) | (i, x) <- zip [1..] (ps !! n)]
+        l3 = l2 + length charsHere
+        allChars = curParty ++ charsHere
+
+        showLocation (i,x) = show i ++ " " ++ theLocations !! x
+        showChars    (i,x) = show i ++ " " ++ snd x
+
+        printOptions :: String -> [String] -> IO ()
+        printOptions str as 
+          | not $ null as = do
+              putStrLn str
+              mapM_ putStrLn as
+          | otherwise = return ()
+
+        -- handleInputs :: [Int] -> IO Game
+        handleInputs [x]
+          | x == 0 = return Over
+          | x >= 1 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
+        handleInputs xs
+          | all (> l1) xs = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
+            
+        handleInputs _ = do
+          putStrLn line6 
+          putStr prompt 
+          input <- getInput [0..l3]
+          handleInputs input
+          
+          
+        
+
+              
+              
+            
+
+    
+
 
 game :: IO ()
 game = undefined
+  
 
 
 ------------------------- Assignment 4: Safety upgrades
