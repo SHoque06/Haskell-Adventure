@@ -268,7 +268,7 @@ characterInput (x:xs) ln acc
 step :: Game -> IO Game
 step Over = return Over
 step (Game m n p ps) = do
-    putStrLn $ line1 ++ theDescriptions !! n ++ "\n"
+    putStrLn $ line1 ++ theDescriptions !! n
     printOptions line2 $ map showLocation paths
     printOptions line3 $ map show curParty
     printOptions line4 $ map show charsHere
@@ -324,7 +324,18 @@ step (Game m n p ps) = do
 
 
 game :: IO ()
-game = undefined
+-- found a neat function called pure
+-- well done me
+game = runGame start
+  where 
+    runGame :: Game -> IO ()
+    runGame g = do
+      g_next <- step g
+      if g_next == Over then
+        return ()
+      else runGame g_next
+      
+
   
 
 
@@ -340,7 +351,7 @@ data Command  = Travel [Int] | Select Party | Talk [Int]
 
 type Solution = [Command]
 
-talk ::Game -> Dialogue -> [(Game,[Int])]
+talk :: Game -> Dialogue -> [(Game,[Int])]
 talk = undefined
 
 select :: Game -> [Party]
