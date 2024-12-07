@@ -1,11 +1,23 @@
 {-
+MAKE DIALOGUE INPUTS SAFE
+REFACTOR FUNCTIONS AND THEIR PARAMETERS
+
+Q5
+
+
+simplify expressions with helper functions
+replace generic types with more specific ones
+-}
+
+
+{-
 Allowed Imports
 Data.Char , Data.List , Data.Maybe , Data.Set , Data.Map , 
 System.Random , Text.Read , Control.Monad
 -}
 
 -- use foldl' if you can
-import Data.List (foldl', null, length, map, filter, take, drop, elem, zip)
+import Data.List (foldl', null, length, map, filter, take, drop, elem, zip, nub, concatMap, subsequences)
 import Data.Maybe (fromJust, fromMaybe, isJust, isNothing)
 import Text.Read (readMaybe)
 import Data.Char (isDigit)
@@ -74,13 +86,12 @@ connect a b m = connect' (min a b) (max a b) m
       | (x1,x2) == (n1,n2) = (x1,x2) : xs
       | otherwise          = (n1,n2) : (x1,x2) : xs
 
--- maybe not preferred cos ik theres only one instance at most
 disconnect :: Node -> Node -> Map -> Map
 disconnect a b m = filter (/=n) m 
   where
     n = (min a b, max a b)
 
--- NEW GLOBAL FNCTION, insertChars removeChars CHECK IF IM ALLOWED TO DO THIS
+-- NEW GLOBAL FNCTION, CHECK IF IM ALLOWED TO DO THIS
 insertChars :: [Character] -> Party -> Party
 insertChars cs p = msort $ p ++ [x | x <- cs, not $ elem x p] 
 
@@ -101,6 +112,10 @@ addAt n_i cs (Game m n p ps) = Game m n p ps'
     ps' = take n_i ps 
           ++ [insertChars cs (ps !! n_i)] 
           ++ drop (n_i+1) ps
+  {- 
+  where
+    (xs, ys) = splitAt n_i ps
+    ps' = xs ++ [insertChars cs (ps !! n_i)] ++ ys-}
 
 addHere :: Party -> Event
 addHere _ Over = Over
@@ -152,10 +167,12 @@ testDialogue = Branch ( isAtZero )
   isAtZero (Game _ n _ _) = n == 0
 
 -- CONSIDER REPLACING game WITH g
+-- REFACTOR
 dialogue :: Game -> Dialogue -> IO Game
 dialogue g (Action str e) = do
   putStrLn str 
-  return $ e g
+  return (e g)
+
 dialogue g (Choice str []) = do 
   putStrLn str
   return g
@@ -163,10 +180,19 @@ dialogue g (Choice str ds) = do
   putStrLn str
   let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
   mapM_ putStrLn options
-  putStr $ prompt ++ " "
-  input <- getLine 
-  let i = read input :: Int
-  dialogue g (snd $ ds !! (i-1))
+  io <- getInput [0..length ds]
+  i <- cleanDialogueInput io
+  if i == 0 then
+    return g
+  else
+    dialogue g (snd $ ds !! (i-1))
+      where
+        cleanDialogueInput :: [Int] -> IO Int
+        cleanDialogueInput [x] = return x
+        cleanDialogueInput _ = do
+          putStrLn line6
+          io <- getInput [1..length ds]
+          cleanDialogueInput io
 
 dialogue g (Branch f e1 e2) = do
   if f g then
@@ -176,7 +202,7 @@ dialogue g (Branch f e1 e2) = do
 
 
 findDialogue :: Party -> Dialogue
-findDialogue chars = findDialogue' chars theDialogues
+findDialogue chars = findDialogue' (msort chars) theDialogues
   where 
     findDialogue' _ [] = Action line0 id
     findDialogue' cs ((p,d):ds) 
@@ -195,7 +221,7 @@ line5 = "What will you do?"
 
 -- -- lb and ub are the bounds of the location list, and uub is for all options
 -- getInput :: Int -> Int -> Int -> IO [Int]
--- getInput lb ub uub = do
+-- getInput lb ub uub = do  -- THIS IS CRAP
 --   input <- getLine 
 --   let input' = map (\x -> readMaybe x :: Maybe Int) (words input)
 --   checks xs 
@@ -215,7 +241,7 @@ line5 = "What will you do?"
 
 --     getCharacters = 
 
-
+-- for dialogue input and location/chars inputs
 getInput :: [Int] -> IO [Int]
 getInput valid_xs = do
   putStr $ prompt ++ " "
@@ -226,32 +252,18 @@ getInput valid_xs = do
       checks as
         | any isNothing as = failTests
         | null as = failTests
-        | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as  -- should be unique elems returned only
+        | length ( nub as ) /= length as = failTests
+        | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as 
         | otherwise = failTests
 
       failTests :: IO [Int]
       failTests = do
-        putStrLn line6  
-        putStr $ prompt ++ " "
+        putStrLn line6
         getInput valid_xs
 
 
 
--- stepInputs :: [Int] -> [String] -> IO [String]
--- stepInputs [] acc = return acc
--- stepInputs choices acc = do
---   selected <- getInput choices
---   handleSelected selected acc
---   where
---     handleSelected [] acc = return acc  
---     handleSelected (c:cs) acc
---       | c `elem` [1..l1] = stepInputs cs (paths !! (c - 1) : acc)  -- Valid path
---       | c == 0 = return []  -- Exit input handling
---       | l1 < c && c <= l3 = stepInputs cs (allOptions !! (c - 1) : acc)  -- Valid other options
---       | otherwise = do
---           putStrLn "Invalid input. Try again."  -- Handle invalid input
---           stepInputs choices acc
-
+{-
 locationInput :: [Int] -> [(Int, Location)] -> Maybe Location
 locationInput [x] ln = lookup x ln 
 locationInput xs _ = Nothing
@@ -264,7 +276,7 @@ characterInput (x:xs) ln acc
   | otherwise = characterInput xs ln (fromJust val : acc)
     where 
       val = (lookup x ln)
-
+-}
 step :: Game -> IO Game
 step Over = return Over
 step (Game m n p ps) = do
@@ -276,9 +288,10 @@ step (Game m n p ps) = do
 
     xs <- getInput [0..l3]
     print paths
-    -- let testtt = locationInput xs paths 
 
     handleInputs xs
+
+    
       where
         paths = [(i,x) | (i, x) <- zip [1..] (connected m n)] 
         l1 = length paths
@@ -324,8 +337,6 @@ step (Game m n p ps) = do
 
 
 game :: IO ()
--- found a neat function called pure
--- well done me
 game = runGame start
   where 
     runGame :: Game -> IO ()
@@ -352,10 +363,36 @@ data Command  = Travel [Int] | Select Party | Talk [Int]
 type Solution = [Command]
 
 talk :: Game -> Dialogue -> [(Game,[Int])]
-talk = undefined
+talk g d = talk' g d []
+  where
+    talk' :: Game -> Dialogue -> [Int] -> [(Game, [Int])]
+    talk' g (Action _ e)     path = [(e g, reverse path)]
+    talk' g (Branch f e1 e2) path = if f g then talk' g e1 path else talk' g e2 path
+    talk' g (Choice _ xs)    path = concatMap parseChoice (zip xs [1..])
+      where
+        parseChoice ((_, d), i) = talk' g d (i : path)
+    
+-- so find all combinations of a b c...
+-- so given ["a","b","c"], get [["a"],["b"],["c"],["a","b"],["a","c"],["b","c"],["a","b","c"]]
+{-subsequences :: [a] -> [[a]]Source#
+
+The subsequences function returns the list of all subsequences of the argument.
+
+Laziness
+Examples
+>>> subsequences "abc"
+["","a","b","ab","c","ac","bc","abc"]
+This function is productive on infinite inputs:
+
+>>> take 8 $ subsequences ['a'..]
+["","a","b","ab","c","ac","bc","abc"]-}
+
 
 select :: Game -> [Party]
-select = undefined
+select Over = []
+select (Game _ n p ps) = tail $ subsequences cs
+  where
+    cs = insertChars p (ps !! n)
 
 travel :: Map -> Node -> [(Node,[Int])]
 travel = undefined
