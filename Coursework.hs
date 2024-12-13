@@ -1,16 +1,4 @@
 {-
-MAKE DIALOGUE INPUTS SAFE
-REFACTOR FUNCTIONS AND THEIR PARAMETERS
-
-Q5
-
-
-simplify expressions with helper functions
-replace generic types with more specific ones
--}
-
-
-{-
 Allowed Imports
 Data.Char , Data.List , Data.Maybe , Data.Set , Data.Map , 
 System.Random , Text.Read , Control.Monad
@@ -18,9 +6,8 @@ System.Random , Text.Read , Control.Monad
 
 -- use foldl' if you can
 import Data.List (foldl', null, length, map, filter, take, drop, elem, zip, nub, concatMap, subsequences)
-import Data.Maybe (fromJust, fromMaybe, isJust, isNothing)
+import Data.Maybe (fromJust, isNothing)
 import Text.Read (readMaybe)
-import Data.Char (isDigit)
 ------------------------- Merge sort
 
 merge :: Ord a => [a] -> [a] -> [a]
@@ -91,12 +78,11 @@ disconnect a b m = filter (/=n) m
   where
     n = (min a b, max a b)
 
--- NEW GLOBAL FNCTION, CHECK IF IM ALLOWED TO DO THIS
 insertChars :: [Character] -> Party -> Party
-insertChars cs p = msort $ p ++ [x | x <- cs, not $ elem x p] 
+insertChars cs p = msort $ p ++ [x | x <- cs, notElem x p] 
 
 removeChars :: [Character] -> Party -> Party
-removeChars cs p = [x | x <- p, not $ elem x cs]
+removeChars cs p = [x | x <- p, notElem x cs]
 
 add :: Party -> Event
 add _ Over = Over
@@ -109,13 +95,12 @@ addAt :: Node -> Party -> Event
 addAt _ _ Over = Over
 addAt n_i cs (Game m n p ps) = Game m n p ps'
   where
-    ps' = take n_i ps 
-          ++ [insertChars cs (ps !! n_i)] 
-          ++ drop (n_i+1) ps
-  {- 
-  where
+    -- ps' = take n_i ps 
+    --       ++ [insertChars cs (ps !! n_i)] 
+    --       ++ drop (n_i+1) ps
+
     (xs, ys) = splitAt n_i ps
-    ps' = xs ++ [insertChars cs (ps !! n_i)] ++ ys-}
+    ps' = xs ++ [insertChars cs (ps !! n_i)] ++ ys
 
 addHere :: Party -> Event
 addHere _ Over = Over
@@ -166,8 +151,8 @@ testDialogue = Branch ( isAtZero )
   isAtZero Over           = False
   isAtZero (Game _ n _ _) = n == 0
 
--- CONSIDER REPLACING game WITH g
--- REFACTOR
+
+
 dialogue :: Game -> Dialogue -> IO Game
 dialogue g (Action str e) = do
   putStrLn str 
@@ -176,23 +161,6 @@ dialogue g (Action str e) = do
 dialogue g (Choice str []) = do 
   putStrLn str
   return g
-dialogue g (Choice str ds) = do
-  putStrLn str
-  let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
-  mapM_ putStrLn options
-  io <- getInput [0..length ds]
-  i <- cleanDialogueInput io
-  if i == 0 then
-    return Over
-  else
-    dialogue g (snd $ ds !! (i-1))
-      where
-        cleanDialogueInput :: [Int] -> IO Int
-        cleanDialogueInput [x] = return x
-        cleanDialogueInput _ = do
-          putStrLn line6
-          io <- getInput [1..length ds]
-          cleanDialogueInput io
 
 dialogue g (Branch f e1 e2) = do
   if f g then
@@ -200,10 +168,32 @@ dialogue g (Branch f e1 e2) = do
   else
     dialogue g e2
 
+dialogue g (Choice str ds) = do
+  putStrLn str
+  let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
+  mapM_ putStrLn options
+  inputOptions <- getInput [0..length ds]
+  i <- dialogueInput inputOptions
+  if i == 0 then
+    return Over
+  else
+    dialogue g (snd $ ds !! (i-1))
+
+      where
+        dialogueInput :: [Int] -> IO Int
+        dialogueInput [x] = return x
+        dialogueInput _ = do
+          putStrLn line6
+          inputOptions <- getInput [1..length ds]
+          dialogueInput inputOptions
+
+
+
 
 findDialogue :: Party -> Dialogue
 findDialogue chars = findDialogue' (msort chars) theDialogues
   where 
+    findDialogue' :: Party -> [(Party, Dialogue)] -> Dialogue
     findDialogue' _ [] = Action line0 id
     findDialogue' cs ((p,d):ds) 
       | cs == p   = d
@@ -219,44 +209,23 @@ line3 = "With you are:"
 line4 = "You can see:"
 line5 = "What will you do?"
 
--- -- lb and ub are the bounds of the location list, and uub is for all options
--- getInput :: Int -> Int -> Int -> IO [Int]
--- getInput lb ub uub = do  -- THIS IS CRAP
---   input <- getLine 
---   let input' = map (\x -> readMaybe x :: Maybe Int) (words input)
---   checks xs 
---     | null xs = failTests
---     | any isNothing xs = failTests
---     | any (< Just lb) || any (> Just uub) = failTests
---     | length xs == 1 && all (<= Just ub) = getLocations
---     | otherwise = getCharacters
 
---   where
---     failTests = do
---       putStrLn line6  
---       getInput lb ub uub
-
---     getLocations ::
-
-
---     getCharacters = 
-
--- for dialogue input and location/chars inputs
+-- takes a list as a parameter which dictates the valid inputs
+-- will then get an input from the user belonging to this set
 getInput :: [Int] -> IO [Int]
 getInput valid_xs = do
   putStr $ prompt ++ " "
   input <- getLine
+
   let parsedInput = map (\x -> readMaybe x :: Maybe Int) (words input) 
   checks parsedInput 
     where
+      checks [] = failTests
       checks as
         | any isNothing as = failTests
-        | null as = failTests
-        -- | length ( nub as ) /= length as = failTests
         | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as 
         | otherwise = failTests
 
-      failTests :: IO [Int]
       failTests = do
         putStrLn line6
         getInput valid_xs
@@ -265,26 +234,23 @@ getInput valid_xs = do
 step :: Game -> IO Game
 step Over = return Over
 step (Game m n p ps) = do
-    putStrLn $ line1 ++ theDescriptions !! n
+    putStrLn   $ line1 ++ theDescriptions !! n
     printOptions line2 $ map showLocation paths
     printOptions line3 $ map showChars curParty
     printOptions line4 $ map showChars charsHere
     putStrLn line5 
 
     xs <- getInput [0..l3]
+    stepInputs xs
 
-    handleInputs xs
-
-    -- TODO refactor below
       where
         paths     = [(i,x)    | (i, x) <- zip [1..] (connected m n)] 
         l1 = length paths
-
         curParty  = [(i+l1,x) | (i, x) <- zip [1..] p]
         l2 = l1 + length curParty
-
         charsHere = [(i+l2,x) | (i, x) <- zip [1..] (ps !! n)]
         l3 = l2 + length charsHere
+        
         allChars = curParty ++ charsHere
 
         showLocation (i,x) = show i ++ " " ++ theLocations !! x
@@ -297,17 +263,17 @@ step (Game m n p ps) = do
               mapM_ putStrLn as
           | otherwise = return ()
 
-        handleInputs :: [Int] -> IO Game
-        handleInputs [x]
+        stepInputs :: [Int] -> IO Game
+        stepInputs [x]
           | x == 0           = return Over
           | x > 0 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
-        handleInputs xs
+        stepInputs xs
           | all (> l1) xs    = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
           | otherwise        = do
               putStrLn line6
               putStr prompt
               input <- getInput [0..l3]
-              handleInputs input
+              stepInputs input
           
         
 
@@ -319,7 +285,7 @@ step (Game m n p ps) = do
 
 
 game :: IO ()
-game = runGame Over
+game = runGame start
   where 
     runGame :: Game -> IO ()
     runGame g = do
