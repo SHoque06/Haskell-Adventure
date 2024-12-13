@@ -394,62 +394,37 @@ create Tree
 
 
 
-
-travel' :: Map -> Node  -> [(Node, [Int])]
-travel' m n = msort $ bfs [n] [] [(n, [])] (toAdjacencyList m [])
-
-toAdjacencyList :: Map -> [(Node, [Int])] -> [(Node, [Int])]
-toAdjacencyList [] acc = acc
-toAdjacencyList ((x1,x2):xs) acc = toAdjacencyList xs (insertNeighbour x2 x1 (insertNeighbour x1 x2 acc))
-    where
-      insertNeighbour :: Node -> Node -> [(Node, [Int])] -> [(Node, [Int])]
-      insertNeighbour a b [] = [(a,[b])]
-
-      
-      insertNeighbour a b ((k,vs):ts)
-        | a == k = (k,b:vs) : ts
-        | otherwise = (k,vs) : insertNeighbour a b ts 
-      
-  
-
-
-type Queue = [Node]
+type Queue = [(Node,[Int])]
 type Visited = [Node]
-type Paths = [(Node, [Int])] 
-bfs :: Queue -> Visited -> Paths -> [(Node, [Int])] -> Paths
-bfs [] _ paths _ = paths 
-bfs (x:xs) v paths adjList
-  | elem x v = bfs xs v paths adjList 
-  | otherwise = bfs queue (x:v) paths' adjList
+type NodePath = (Node, [Node])
+type ChoicePath = (Node,[Int])
+type NodeChoicePath = (Node, [(Node, Int)])
+
+travel :: Map -> Node  -> [ChoicePath]
+travel m n = bfs [(n,[])] [] (toAdjacencyList m [])
+  where
+    toAdjacencyList :: Map -> [NodeChoicePath] -> [NodeChoicePath]
+    toAdjacencyList [] acc = acc
+    toAdjacencyList ((x1,x2):xs) acc = toAdjacencyList xs (insertNeighbour x2 x1 (insertNeighbour x1 x2 acc))
+
+    insertNeighbour :: Node -> Node -> [NodeChoicePath] -> [NodeChoicePath]
+    insertNeighbour a b [] = [(a,[(b,1)])]    
+    insertNeighbour a b ((k,vs):ts)
+      | a == k = (k,(b, length vs + 1):vs) : ts
+      | otherwise = (k,vs) : insertNeighbour a b ts 
+
+bfs :: Queue -> Visited -> [NodeChoicePath] -> [NodePath]
+bfs [] _ _ = []
+bfs ((n,path) : q) v adjList
+  | elem n v = bfs q v adjList
+  | otherwise = (n, path) : bfs (q ++ newPaths) (n : v) adjList
       where
-        neighbours = filter (`notElem` v) (fromMaybe [] (lookup x adjList))
-        curPath = fromMaybe [] (lookup x paths)
-        newPaths = [(n, curPath ++ [n]) | n <- neighbours, notElem n $ map fst paths]
-          
-        paths' = paths ++ newPaths  
-        queue = xs ++ neighbours  
--- need to add in empty [] for unreachable locations
-
-  
+        neighbours = fromJust (lookup n adjList)
+        newPaths = [(n, path ++ [c]) | (n, c) <- neighbours, notElem n v]
+      
 
 
 
-
-
-
-
--- constructTree (Node startVal []) v
---   where
---     adjList =  [(0 , [1,2]),
---                 (1),
---                 (2),
---                 (3),
---                 (4),
---                 (5),
---                 ]
-
-travel :: Map -> Node -> [(Node,[Int])]
-travel = undefined
 
 
 
