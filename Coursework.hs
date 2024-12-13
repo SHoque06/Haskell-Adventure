@@ -396,17 +396,14 @@ create Tree
 
 
 travel' :: Map -> Node  -> [(Node, [Int])]
-travel' m n = bfs [n] [] [(n, [n])] (mapToAdjacencyList m emptyAdjList)
-  where
-    nodes = msort $ nub $ concatMap (\(x1,x2) -> [x1,x2]) m
-    emptyAdjList = [(x,[]) | x <- nodes]
+travel' m n = msort $ bfs [n] [] [(n, [])] (toAdjacencyList m [])
 
-mapToAdjacencyList :: Map -> [(Node, [Int])] -> [(Node, [Int])]
-mapToAdjacencyList [] acc = acc
-mapToAdjacencyList ((x1,x2):xs) acc = mapToAdjacencyList xs (insertNeighbour x2 x1 (insertNeighbour x1 x2 acc))
+toAdjacencyList :: Map -> [(Node, [Int])] -> [(Node, [Int])]
+toAdjacencyList [] acc = acc
+toAdjacencyList ((x1,x2):xs) acc = toAdjacencyList xs (insertNeighbour x2 x1 (insertNeighbour x1 x2 acc))
     where
       insertNeighbour :: Node -> Node -> [(Node, [Int])] -> [(Node, [Int])]
-      insertNeighbour a b [] = error "insertNeighbour: required key not found :("
+      insertNeighbour a b [] = [(a,[b])]
 
       
       insertNeighbour a b ((k,vs):ts)
