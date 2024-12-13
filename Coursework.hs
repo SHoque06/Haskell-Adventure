@@ -6,7 +6,7 @@ System.Random , Text.Read , Control.Monad
 
 -- use foldl' if you can
 import Data.List (foldl', null, length, map, filter, take, drop, elem, zip, nub, concatMap, subsequences)
-import Data.Maybe (fromJust, isNothing)
+import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Text.Read (readMaybe)
 ------------------------- Merge sort
 
@@ -24,6 +24,25 @@ msort [x] = [x]
 msort xs  = msort (take n xs) `merge` msort (drop n xs)
   where
     n = length xs `div` 2
+
+-- TODO 
+mergePathChoice :: [ChoicePath] -> [ChoicePath] -> [ChoicePath]
+mergePathChoice xs [] = xs
+mergePathChoice [] ys = ys
+mergePathChoice (x : xs) (y : ys)
+    | length x_p < length y_p = x : mergePathChoice xs (y:ys)
+    | otherwise = y : mergePathChoice (x:xs) ys
+        where 
+          (x_n,x_p) = x
+          (y_n,y_p) = y
+
+msortPathChoice :: [ChoicePath] -> [ChoicePath]
+msortPathChoice []  = []
+msortPathChoice [x] = [x]
+msortPathChoice xs  = msortPathChoice (take n xs) `mergePathChoice` msortPathChoice (drop n xs)
+  where
+    n = length xs `div` 2
+
     
 ------------------------- Game world types
 
@@ -53,15 +72,6 @@ connected m n = xs ++ ys
     ys = [snd x | x <- m, fst x == n] :: [Node]
 
 
--- connect a b m = foldl' f [] m
---   where
---     (n1,n2) = (min a b, max a b)
---     f acc (x1,x2)
-      -- | etc.......
---       | n1 < x1 || n1 == x1 && n2 < x2 = (x1,x2) : acc
---       | otherwise = (n1,n2) : (x1,x2) : acc
-
-
 connect :: Node -> Node -> Map -> Map
 connect a b m = connect' (min a b) (max a b) m
   where
@@ -77,6 +87,7 @@ disconnect :: Node -> Node -> Map -> Map
 disconnect a b m = filter (/=n) m 
   where
     n = (min a b, max a b)
+
 
 insertChars :: [Character] -> Party -> Party
 insertChars cs p = msort $ p ++ [x | x <- cs, notElem x p] 
@@ -236,8 +247,8 @@ step Over = return Over
 step (Game m n p ps) = do
     putStrLn   $ line1 ++ theDescriptions !! n
     printOptions line2 $ map showLocation paths
-    printOptions line3 $ map showChars curParty
-    printOptions line4 $ map showChars charsHere
+    printOptions line3 $ map showChars    curParty
+    printOptions line4 $ map showChars    charsHere
     putStrLn line5 
 
     xs <- getInput [0..l3]
@@ -268,7 +279,7 @@ step (Game m n p ps) = do
           | x == 0           = return Over
           | x > 0 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
         stepInputs xs
-          | all (> l1) xs    = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
+          | all (>l1) xs    = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
           | otherwise        = do
               putStrLn line6
               putStr prompt
@@ -310,6 +321,7 @@ data Command  = Travel [Int] | Select Party | Talk [Int]
 
 type Solution = [Command]
 
+
 talk :: Game -> Dialogue -> [(Game,[Int])]
 talk g d = talk' g d []
   where
@@ -318,27 +330,8 @@ talk g d = talk' g d []
     talk' g (Branch f e1 e2) path = if f g then talk' g e1 path else talk' g e2 path
     talk' g (Choice _ xs)    path = concatMap parseChoice (zip xs [1..])
       where
-        parseChoice ((_, d), i) = talk' g d (i : path)
+        parseChoice ((_,d), i) = talk' g d (i : path)
     
--- so find all combinations of a b c...
--- so given ["a","b","c"], i wanna get [["a"],["b"],["c"],["a","b"],["a","c"],["b","c"],["a","b","c"]]
-
-
-{-
-from haskell docs
-subsequences :: [a] -> [[a]]Source#
-
-The subsequences function returns the list of all subsequences of the argument.
-
-Laziness
-Examples
->>> subsequences "abc"
-["","a","b","ab","c","ac","bc","abc"]
-This function is productive on infinite inputs:
-
->>> take 8 $ subsequences ['a'..]
-["","a","b","ab","c","ac","bc","abc"]-}
-
 
 select :: Game -> [Party]
 select Over = []
@@ -348,18 +341,8 @@ select (Game _ n p ps) = tail $ subsequences cs
 
 
 
-{-
-depth first search
-create adjacency lists
-create Tree
-
--}
-
-
-
-
-
-
+-- Node represents the location indices
+-- Int represents the corresponding choices
 type Queue = [(Node,[Int])]
 type Visited = [Node]
 type NodePath = (Node, [Node])
@@ -367,7 +350,8 @@ type ChoicePath = (Node,[Int])
 type NodeChoicePath = (Node, [(Node, Int)])
 
 travel :: Map -> Node  -> [ChoicePath]
-travel m n = bfs [(n,[])] [] (toAdjacencyList m [])
+travel m n = msortPathChoice $ bfs [(n,[])] [] (toAdjacencyList m [])
+
   where
     toAdjacencyList :: Map -> [NodeChoicePath] -> [NodeChoicePath]
     toAdjacencyList [] acc = acc
@@ -379,22 +363,17 @@ travel m n = bfs [(n,[])] [] (toAdjacencyList m [])
       | a == k = (k,(b, length vs + 1):vs) : ts
       | otherwise = (k,vs) : insertNeighbour a b ts 
 
-bfs :: Queue -> Visited -> [NodeChoicePath] -> [NodePath]
+-- breadth first search 
+-- also parses the paths into their respective choices 
+bfs :: Queue -> Visited -> [NodeChoicePath] -> [ChoicePath]
 bfs [] _ _ = []
 bfs ((n,path) : q) v adjList
   | elem n v = bfs q v adjList
-  | otherwise = (n, path) : bfs (q ++ newPaths) (n : v) adjList
+  | otherwise = (n, path) : bfs (q++newPaths) (n:v) adjList
       where
-        neighbours = fromJust (lookup n adjList)
+        neighbours = fromMaybe [] (lookup n adjList)
         newPaths = [(n, path ++ [c]) | (n, c) <- neighbours, notElem n v]
       
-
-
-
-
-
-
-
 
 
 allSteps :: Game -> [(Solution,Game)]
