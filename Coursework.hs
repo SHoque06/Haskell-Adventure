@@ -1,10 +1,3 @@
-{-
-Allowed Imports
-Data.Char , Data.List , Data.Maybe , Data.Set , Data.Map , 
-System.Random , Text.Read , Control.Monad
--}
-
--- use foldl' if you can
 import Data.List (foldl', null, length, map, filter, take, drop, elem, zip, nub, concatMap, subsequences)
 import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Text.Read (readMaybe)
@@ -25,21 +18,22 @@ msort xs  = msort (take n xs) `merge` msort (drop n xs)
   where
     n = length xs `div` 2
 
--- TODO 
-mergePathChoice :: [ChoicePath] -> [ChoicePath] -> [ChoicePath]
-mergePathChoice xs [] = xs
-mergePathChoice [] ys = ys
-mergePathChoice (x : xs) (y : ys)
-    | length x_p < length y_p = x : mergePathChoice xs (y:ys)
-    | otherwise = y : mergePathChoice (x:xs) ys
+-- type specific merge sort for use in travel
+mergeChoicePath :: [ChoicePath] -> [ChoicePath] -> [ChoicePath]
+mergeChoicePath xs [] = xs
+mergeChoicePath [] ys = ys
+mergeChoicePath (x : xs) (y : ys)
+    | length x_p < length y_p = x : mergeChoicePath xs (y:ys)
+    | otherwise               = y : mergeChoicePath (x:xs) ys
         where 
           (x_n,x_p) = x
           (y_n,y_p) = y
 
-msortPathChoice :: [ChoicePath] -> [ChoicePath]
-msortPathChoice []  = []
-msortPathChoice [x] = [x]
-msortPathChoice xs  = msortPathChoice (take n xs) `mergePathChoice` msortPathChoice (drop n xs)
+msortChoicePath :: [ChoicePath] -> [ChoicePath]
+msortChoicePath []  = []
+msortChoicePath [x] = [x]
+msortChoicePath xs  = msortChoicePath (take n xs) `mergeChoicePath` 
+                      msortChoicePath (drop n xs)
   where
     n = length xs `div` 2
 
@@ -75,7 +69,6 @@ connected m n = xs ++ ys
 connect :: Node -> Node -> Map -> Map
 connect a b m = connect' (min a b) (max a b) m
   where
-    
     connect' n1 n2 [] = [(n1,n2)]
     connect' n1 n2 ((x1,x2):xs)
       | n1 > x1 || (n1 == x1 && n2 > x2) 
@@ -106,10 +99,6 @@ addAt :: Node -> Party -> Event
 addAt _ _ Over = Over
 addAt n_i cs (Game m n p ps) = Game m n p ps'
   where
-    -- ps' = take n_i ps 
-    --       ++ [insertChars cs (ps !! n_i)] 
-    --       ++ drop (n_i+1) ps
-
     (xs, ys) = splitAt n_i ps
     ps' = xs ++ [insertChars cs (ps !! n_i)] ++ ys
 
@@ -183,6 +172,8 @@ dialogue g (Choice str ds) = do
   putStrLn str
   let options = [" " ++ show i ++ " " ++ x | ((x,_),i) <- zip ds [1..]]
   mapM_ putStrLn options
+
+  -- handling dialogue input to ensure safe inputs
   inputOptions <- getInput [0..length ds]
   i <- dialogueInput inputOptions
   if i == 0 then
@@ -200,13 +191,13 @@ dialogue g (Choice str ds) = do
 
 
 
-
+-- finds the corresponsing dialogue given a set of characters
 findDialogue :: Party -> Dialogue
 findDialogue chars = findDialogue' (msort chars) theDialogues
   where 
     findDialogue' :: Party -> [(Party, Dialogue)] -> Dialogue
     findDialogue' _ [] = Action line0 id
-    findDialogue' cs ((p,d):ds) 
+    findDialogue' cs ((p,d) : ds) 
       | cs == p   = d
       | otherwise = findDialogue' cs ds
 
@@ -228,13 +219,14 @@ getInput valid_xs = do
   putStr $ prompt ++ " "
   input <- getLine
 
+  -- validating io
   let parsedInput = map (\x -> readMaybe x :: Maybe Int) (words input) 
   checks parsedInput 
     where
       checks [] = failTests
-      checks as
-        | any isNothing as = failTests
-        | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as 
+      checks xs
+        | any isNothing xs = failTests
+        | all (`elem` valid_xs) (map fromJust xs) = return $ map fromJust xs 
         | otherwise = failTests
 
       failTests = do
@@ -245,46 +237,55 @@ getInput valid_xs = do
 step :: Game -> IO Game
 step Over = return Over
 step (Game m n p ps) = do
-    putStrLn   $ line1 ++ theDescriptions !! n
-    printOptions line2 $ map showLocation paths
-    printOptions line3 $ map showChars    curParty
-    printOptions line4 $ map showChars    charsHere
-    putStrLn line5 
 
-    xs <- getInput [0..l3]
-    stepInputs xs
+  -- printing formatted options to terminal
+  putStrLn   $ line1 ++ theDescriptions !! n
+  printOptions line2 $ map showLocation locations
+  printOptions line3 $ map showChars    curParty
+  printOptions line4 $ map showChars    charsHere
+  putStrLn line5 
 
-      where
-        paths     = [(i,x)    | (i, x) <- zip [1..] (connected m n)] 
-        l1 = length paths
-        curParty  = [(i+l1,x) | (i, x) <- zip [1..] p]
-        l2 = l1 + length curParty
-        charsHere = [(i+l2,x) | (i, x) <- zip [1..] (ps !! n)]
-        l3 = l2 + length charsHere
-        
-        allChars = curParty ++ charsHere
+  xs <- getInput [0..len_ps]
+  stepInputs xs
 
-        showLocation (i,x) = show i ++ " " ++ theLocations !! x
-        showChars    (i,x) = show i ++ " " ++ x
+    where
+      printOptions :: String -> [String] -> IO ()
+      printOptions str as 
+        | not $ null as = do
+            putStrLn str
+            mapM_ putStrLn as
+        | otherwise = return ()
 
-        printOptions :: String -> [String] -> IO ()
-        printOptions str as 
-          | not $ null as = do
-              putStrLn str
-              mapM_ putStrLn as
-          | otherwise = return ()
 
-        stepInputs :: [Int] -> IO Game
-        stepInputs [x]
-          | x == 0           = return Over
-          | x > 0 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
-        stepInputs xs
-          | all (>l1) xs    = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
-          | otherwise        = do
-              putStrLn line6
-              putStr prompt
-              input <- getInput [0..l3]
-              stepInputs input
+      locations = [(i         ,x) | (i, x) <- zip [1..] (connected m n)] 
+      len_loc   = length locations
+
+      curParty  = [(i+len_loc ,x) | (i, x) <- zip [1..] p]
+      len_p     = len_loc + length curParty
+
+      charsHere = [(i+len_p   ,x) | (i, x) <- zip [1..] (ps !! n)]
+      len_ps    = len_p + length charsHere
+      
+      allChars = curParty ++ charsHere
+
+      showLocation (i,x) = show i ++ " " ++ theLocations !! x
+      showChars    (i,x) = show i ++ " " ++ x
+
+      -- handling inputs for next locations or character speech
+      stepInputs :: [Int] -> IO Game
+      stepInputs [x]
+        | x == 0            = return Over
+        | x > 0 && x <= len_loc 
+                            = return $ Game m (connected m n !! (x - 1)) p ps  
+      stepInputs xs
+        | all (>len_loc) xs = dialogue (Game m n p ps) $ 
+                              findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs)
+        | otherwise         = do
+            putStrLn line6
+            putStr prompt
+            input <- getInput [0..len_ps]
+            stepInputs input
+              
           
         
 
@@ -335,7 +336,7 @@ talk g d = talk' g d []
 
 select :: Game -> [Party]
 select Over = []
-select (Game _ n p ps) = tail $ subsequences cs
+select (Game _ n p ps) = subsequences cs
   where
     cs = insertChars p (ps !! n)
 
@@ -350,7 +351,7 @@ type ChoicePath = (Node,[Int])
 type NodeChoicePath = (Node, [(Node, Int)])
 
 travel :: Map -> Node  -> [ChoicePath]
-travel m n = msortPathChoice $ bfs [(n,[])] [] (toAdjacencyList m [])
+travel m n = msortChoicePath $ bfs [(n,[])] [] (toAdjacencyList m [])
 
   where
     toAdjacencyList :: Map -> [NodeChoicePath] -> [NodeChoicePath]
@@ -364,7 +365,7 @@ travel m n = msortPathChoice $ bfs [(n,[])] [] (toAdjacencyList m [])
       | otherwise = (k,vs) : insertNeighbour a b ts 
 
 -- breadth first search 
--- also parses the paths into their respective choices 
+-- function also parses the nodes into their respective choices 
 bfs :: Queue -> Visited -> [NodeChoicePath] -> [ChoicePath]
 bfs [] _ _ = []
 bfs ((n,path) : q) v adjList
@@ -372,15 +373,20 @@ bfs ((n,path) : q) v adjList
   | otherwise = (n, path) : bfs (q++newPaths) (n:v) adjList
       where
         neighbours = fromMaybe [] (lookup n adjList)
-        newPaths = [(n, path ++ [c]) | (n, c) <- neighbours, notElem n v]
+        newPaths = [(n', path ++ [c]) | (n', c) <- neighbours, notElem n v]
       
 
-
+-- 5d and 5e not implemented
 allSteps :: Game -> [(Solution,Game)]
-allSteps = undefined
+allSteps Over = []
+allSteps (Game m n p ps) = undefined
+  where 
+    travelOptions = [Travel path | (n,path) <- travel m n]
+
 
 solve :: Game -> Solution
-solve = undefined
+solve Over = []
+solve g    = undefined 
 
 walkthrough :: IO ()
 walkthrough = (putStrLn . unlines . filter (not . null) . map format . solve) start
