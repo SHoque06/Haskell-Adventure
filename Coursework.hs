@@ -183,7 +183,7 @@ dialogue g (Choice str ds) = do
   io <- getInput [0..length ds]
   i <- cleanDialogueInput io
   if i == 0 then
-    return g
+    return Over
   else
     dialogue g (snd $ ds !! (i-1))
       where
@@ -252,7 +252,7 @@ getInput valid_xs = do
       checks as
         | any isNothing as = failTests
         | null as = failTests
-        | length ( nub as ) /= length as = failTests
+        -- | length ( nub as ) /= length as = failTests
         | all (`elem` valid_xs) (map fromJust as) = return $ map fromJust as 
         | otherwise = failTests
 
@@ -262,41 +262,25 @@ getInput valid_xs = do
         getInput valid_xs
 
 
-
-{-
-locationInput :: [Int] -> [(Int, Location)] -> Maybe Location
-locationInput [x] ln = lookup x ln 
-locationInput xs _ = Nothing
-
-characterInput :: [Int] -> [(Int, Character)] -> Party -> Maybe Party
-characterInput [] _ [] = Nothing
-characterInput [] _ acc = Just acc
-characterInput (x:xs) ln acc 
-  | isNothing val = Nothing
-  | otherwise = characterInput xs ln (fromJust val : acc)
-    where 
-      val = (lookup x ln)
--}
 step :: Game -> IO Game
 step Over = return Over
 step (Game m n p ps) = do
     putStrLn $ line1 ++ theDescriptions !! n
     printOptions line2 $ map showLocation paths
-    printOptions line3 $ map show curParty
-    printOptions line4 $ map show charsHere
+    printOptions line3 $ map showChars curParty
+    printOptions line4 $ map showChars charsHere
     putStrLn line5 
 
     xs <- getInput [0..l3]
-    print paths
 
     handleInputs xs
 
-    
+    -- TODO refactor below
       where
-        paths = [(i,x) | (i, x) <- zip [1..] (connected m n)] 
+        paths     = [(i,x)    | (i, x) <- zip [1..] (connected m n)] 
         l1 = length paths
 
-        curParty = [(i+l1,x)| (i, x) <- zip [1..] p]
+        curParty  = [(i+l1,x) | (i, x) <- zip [1..] p]
         l2 = l1 + length curParty
 
         charsHere = [(i+l2,x) | (i, x) <- zip [1..] (ps !! n)]
@@ -304,7 +288,7 @@ step (Game m n p ps) = do
         allChars = curParty ++ charsHere
 
         showLocation (i,x) = show i ++ " " ++ theLocations !! x
-        showChars    (i,x) = show i ++ " " ++ snd x
+        showChars    (i,x) = show i ++ " " ++ x
 
         printOptions :: String -> [String] -> IO ()
         printOptions str as 
@@ -313,19 +297,17 @@ step (Game m n p ps) = do
               mapM_ putStrLn as
           | otherwise = return ()
 
-        -- handleInputs :: [Int] -> IO Game
+        handleInputs :: [Int] -> IO Game
         handleInputs [x]
-          | x == 0 = return Over
-          | x >= 1 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
+          | x == 0           = return Over
+          | x > 0 && x <= l1 = return $ Game m (connected m n !! (x - 1)) p ps  
         handleInputs xs
-          | all (> l1) xs = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
-            
-        handleInputs _ = do
-          putStrLn line6 
-          putStr prompt 
-          input <- getInput [0..l3]
-          handleInputs input
-          
+          | all (> l1) xs    = dialogue (Game m n p ps) $ findDialogue (map (\x -> fromJust $ lookup (x) allChars) xs) 
+          | otherwise        = do
+              putStrLn line6
+              putStr prompt
+              input <- getInput [0..l3]
+              handleInputs input
           
         
 
@@ -337,7 +319,7 @@ step (Game m n p ps) = do
 
 
 game :: IO ()
-game = runGame start
+game = runGame Over
   where 
     runGame :: Game -> IO ()
     runGame g = do
@@ -373,8 +355,12 @@ talk g d = talk' g d []
         parseChoice ((_, d), i) = talk' g d (i : path)
     
 -- so find all combinations of a b c...
--- so given ["a","b","c"], get [["a"],["b"],["c"],["a","b"],["a","c"],["b","c"],["a","b","c"]]
-{-subsequences :: [a] -> [[a]]Source#
+-- so given ["a","b","c"], i wanna get [["a"],["b"],["c"],["a","b"],["a","c"],["b","c"],["a","b","c"]]
+
+
+{-
+from haskell docs
+subsequences :: [a] -> [[a]]Source#
 
 The subsequences function returns the list of all subsequences of the argument.
 
@@ -394,8 +380,84 @@ select (Game _ n p ps) = tail $ subsequences cs
   where
     cs = insertChars p (ps !! n)
 
+
+
+{-
+depth first search
+create adjacency lists
+create Tree
+
+-}
+
+
+
+
+
+
+
+travel' :: Map -> Node  -> [(Node, [Int])]
+travel' m n = bfs [n] [] [(n, [n])] (mapToAdjacencyList m emptyAdjList)
+  where
+    nodes = msort $ nub $ concatMap (\(x1,x2) -> [x1,x2]) m
+    emptyAdjList = [(x,[]) | x <- nodes]
+
+mapToAdjacencyList :: Map -> [(Node, [Int])] -> [(Node, [Int])]
+mapToAdjacencyList [] acc = acc
+mapToAdjacencyList ((x1,x2):xs) acc = mapToAdjacencyList xs (insertNeighbour x2 x1 (insertNeighbour x1 x2 acc))
+    where
+      insertNeighbour :: Node -> Node -> [(Node, [Int])] -> [(Node, [Int])]
+      insertNeighbour a b [] = error "insertNeighbour: required key not found :("
+
+      
+      insertNeighbour a b ((k,vs):ts)
+        | a == k = (k,b:vs) : ts
+        | otherwise = (k,vs) : insertNeighbour a b ts 
+      
+  
+
+
+type Queue = [Node]
+type Visited = [Node]
+type Paths = [(Node, [Int])] 
+bfs :: Queue -> Visited -> Paths -> [(Node, [Int])] -> Paths
+bfs [] _ paths _ = paths 
+bfs (x:xs) v paths adjList
+  | elem x v = bfs xs v paths adjList 
+  | otherwise = bfs queue (x:v) paths' adjList
+      where
+        neighbours = filter (`notElem` v) (fromMaybe [] (lookup x adjList))
+        curPath = fromMaybe [] (lookup x paths)
+        newPaths = [(n, curPath ++ [n]) | n <- neighbours, notElem n $ map fst paths]
+          
+        paths' = paths ++ newPaths  
+        queue = xs ++ neighbours  
+-- need to add in empty [] for unreachable locations
+
+  
+
+
+
+
+
+
+
+-- constructTree (Node startVal []) v
+--   where
+--     adjList =  [(0 , [1,2]),
+--                 (1),
+--                 (2),
+--                 (3),
+--                 (4),
+--                 (5),
+--                 ]
+
 travel :: Map -> Node -> [(Node,[Int])]
 travel = undefined
+
+
+
+
+
 
 allSteps :: Game -> [(Solution,Game)]
 allSteps = undefined
